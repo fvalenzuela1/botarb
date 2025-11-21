@@ -133,10 +133,13 @@ async def ensure_initialized():
 
 @app.get("/setwebhook")
 def set_webhook():
-    asyncio.get_event_loop().run_until_complete(ensure_initialized())
-    asyncio.get_event_loop().run_until_complete(
-        bot_app.bot.set_webhook(WEBHOOK_URL)
-    )
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(ensure_initialized())
+    loop.run_until_complete(bot_app.bot.set_webhook(WEBHOOK_URL))
+    loop.close()
+
     return "Webhook configurado"
 
 
@@ -145,11 +148,16 @@ def receive_update():
     data = request.get_json(force=True)
     update = Update.de_json(data, bot_app.bot)
 
-    asyncio.get_event_loop().run_until_complete(ensure_initialized())
-    asyncio.get_event_loop().run_until_complete(
-        bot_app.process_update(update)
-    )
+    # Crear un event loop nuevo POR request (soluciona tu error)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    loop.run_until_complete(ensure_initialized())
+    loop.run_until_complete(bot_app.process_update(update))
+    loop.close()
+
     return "OK"
+
 
 
 # ---------------------------
