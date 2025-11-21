@@ -113,8 +113,10 @@ bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler
 
 
 # ---------------------------
-# PTB20 INITIALIZATION
+# INICIALIZACIÓN BAJO DEMANDA
 # ---------------------------
+
+initialized = False
 
 async def ensure_initialized():
     global initialized
@@ -142,24 +144,21 @@ def set_webhook():
 @app.post("/")
 def receive_update():
     data = request.get_json(force=True)
-    logging.info("UPDATE RECIBIDO: %s", data)
 
     update = Update.de_json(data, bot_app.bot)
 
-    # procesar el update con un event loop fresco
-    asyncio.run(bot_app.process_update(update))
+    async def process():
+        await ensure_initialized()
+        await bot_app.process_update(update)
 
+    asyncio.run(process())
     return "OK"
 
 
 # ---------------------------
-# RUN LOCAL (importante)
+# RUN LOCAL
 # ---------------------------
 
 if __name__ == "__main__":
-    # inicializar PTB antes de Flask
-    asyncio.run(bot_app.initialize())
-    asyncio.run(bot_app.start())
-
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
