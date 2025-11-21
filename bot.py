@@ -10,6 +10,7 @@ from telegram.ext import (
 )
 from flask import Flask, request
 import os
+import asyncio
 
 logging.basicConfig(level=logging.INFO)
 
@@ -118,13 +119,14 @@ bot_app.add_handler(CallbackQueryHandler(button_handler))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
 # ---------------------------
-# FLASK WEBHOOK
+# WEBHOOK CORRECTO PTB 20+
 # ---------------------------
 
 @app.post("/")
-def main_webhook():
-    update = Update.de_json(request.get_json(force=True), bot_app.bot)
-    bot_app.update_queue.put_nowait(update)
+async def main_webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot_app.bot)
+    await bot_app.process_update(update)
     return "OK", 200
 
 @app.get("/setwebhook")
