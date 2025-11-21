@@ -26,8 +26,7 @@ app = Flask(__name__)
 # Crear la aplicación de Telegram
 bot_app = Application.builder().token(TOKEN).build()
 
-# Para evitar inicializar varias veces
-initialized = False
+initialized = False  # evita doble init
 
 
 # ---------------------------
@@ -59,26 +58,31 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    user_id = update.effective_user.id
+
     if query.data == "completar":
-        context.user_data["mode"] = "completar"
+        context.application.user_data[user_id] = {"mode": "completar"}
         await query.message.reply_text(
             "Envíame: `s1 p1 p2`\nEj: `100 0.54 0.23`",
             parse_mode="Markdown"
         )
 
     elif query.data == "total":
-        context.user_data["mode"] = "total"
+        context.application.user_data[user_id] = {"mode": "total"}
         await query.message.reply_text(
             "Envíame: `S p1 p2`\nEj: `1000 0.68 0.28`",
             parse_mode="Markdown"
         )
 
+
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    mode = context.user_data.get("mode")
+    user_id = update.effective_user.id
+    mode = context.application.user_data.get(user_id, {}).get("mode")
 
     if not mode:
         await update.message.reply_text("Usa /start para comenzar.")
@@ -109,14 +113,14 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
-# Agregar handlers
+# Registrar handlers
 bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button_handler))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
 
 # ---------------------------
-# INICIALIZACIÓN REQUERIDA POR PTB20+
+# INITIALIZACIÓN PTB20+
 # ---------------------------
 
 async def ensure_initialized():
@@ -137,7 +141,10 @@ def set_webhook():
     asyncio.set_event_loop(loop)
 
     loop.run_until_complete(ensure_initialized())
-    loop.run_until_complete(bot_app.bot.set_webhook(WEBHOOK_URL))
+    loop.run_until_complete(bot_app.bot.set_webhook(
+        url=WEBHOOK_URL,
+        allowed_updates=["message", "callback_query"]
+    ))
     loop.close()
 
     return "Webhook configurado"
@@ -148,7 +155,6 @@ def receive_update():
     data = request.get_json(force=True)
     update = Update.de_json(data, bot_app.bot)
 
-    # Crear un event loop nuevo POR request (soluciona tu error)
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -159,9 +165,8 @@ def receive_update():
     return "OK"
 
 
-
 # ---------------------------
-# RUN LOCAL
+# LOCAL RUN
 # ---------------------------
 
 if __name__ == "__main__":
