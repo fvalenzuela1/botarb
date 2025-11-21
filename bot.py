@@ -129,10 +129,11 @@ async def main_webhook():
     await bot_app.process_update(update)
     return "OK", 200
 
+import asyncio
+
 @app.get("/setwebhook")
 def set_webhook():
-    bot_app.bot.set_webhook(url=WEBHOOK_URL)
+    asyncio.run(bot_app.bot.set_webhook(url=WEBHOOK_URL))
     return "Webhook set"
-
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
