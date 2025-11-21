@@ -130,17 +130,12 @@ async def ensure_initialized():
 
 @app.get("/setwebhook")
 def set_webhook():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(ensure_initialized())
-    loop.run_until_complete(
+    asyncio.run(
         bot_app.bot.set_webhook(
             url=WEBHOOK_URL,
             allowed_updates=["message", "callback_query"]
         )
     )
-    loop.close()
     return "Webhook configurado"
 
 
@@ -151,20 +146,20 @@ def receive_update():
 
     update = Update.de_json(data, bot_app.bot)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-    loop.run_until_complete(ensure_initialized())
-    loop.run_until_complete(bot_app.process_update(update))
-    loop.close()
+    # procesar el update con un event loop fresco
+    asyncio.run(bot_app.process_update(update))
 
     return "OK"
 
 
 # ---------------------------
-# LOCAL RUN
+# RUN LOCAL (importante)
 # ---------------------------
 
 if __name__ == "__main__":
+    # inicializar PTB antes de Flask
+    asyncio.run(bot_app.initialize())
+    asyncio.run(bot_app.start())
+
     port = int(os.getenv("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
