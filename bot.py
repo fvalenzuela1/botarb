@@ -1,24 +1,35 @@
+import os
 import logging
+import asyncio
+from flask import Flask, request
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
-    ApplicationBuilder,
+    Application,
     CommandHandler,
     CallbackQueryHandler,
     MessageHandler,
     ContextTypes,
-    filters,
+    filters
 )
-from flask import Flask, request
-import os
-import asyncio
+
+# ---------------------------
+# CONFIG
+# ---------------------------
 
 logging.basicConfig(level=logging.INFO)
 
-TOKEN = os.environ.get("BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+TOKEN = os.getenv("BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+# Flask app
 app = Flask(__name__)
-bot_app = ApplicationBuilder().token(TOKEN).build()
+
+# PTB Application (async)
+bot_app = Application.builder().token(TOKEN).build()
+
+# Event loop para ejecutar funciones async dentro de Flask (sync)
+loop = asyncio.get_event_loop()
+
 
 # ---------------------------
 # FORMULAS
@@ -34,17 +45,21 @@ def arbitraje_total(S, p1, p2):
     s2 = S * p2 / (p1 + p2)
     return s1, s2
 
+
 # ---------------------------
-# START / MENU
+# START
 # ---------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [
         [InlineKeyboardButton("🧮 Completar arbitraje", callback_data="completar")],
-        [InlineKeyboardButton("🔀 Arbitraje total", callback_data="total")],
+        [InlineKeyboardButton("🔀 Arbitraje total", callback_data="total")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Selecciona una opción:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Selecciona una opción:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
 
 # ---------------------------
 # CALLBACKS
@@ -55,39 +70,33 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "completar":
+        context.user_data["mode"] = "completar"
         await query.message.reply_text(
-            "Envíame los valores así:\n\n"
-            "`s1 p1 p2`\n"
-            "Ejemplo: `100 0.54 0.23`",
+            "Envíame los valores así:\n\n`s1 p1 p2`\nEjemplo: `100 0.54 0.23`",
             parse_mode="Markdown"
         )
-        context.user_data["mode"] = "completar"
 
     elif query.data == "total":
+        context.user_data["mode"] = "total"
         await query.message.reply_text(
-            "Envíame los valores así:\n\n"
-            "`S p1 p2`\n"
-            "Ejemplo: `1000 0.68 0.28`",
+            "Envíame los valores así:\n\n`S p1 p2`\nEjemplo: `1000 0.68 0.28`",
             parse_mode="Markdown"
         )
-        context.user_data["mode"] = "total"
+
 
 # ---------------------------
 # TEXTO
 # ---------------------------
 
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    mode = context.user_data.get("mode", None)
+    mode = context.user_data.get("mode")
 
     if not mode:
         await update.message.reply_text("Usa /start para comenzar.")
         return
 
     try:
-        parts = update.message.text.split()
-        a = float(parts[0])
-        b = float(parts[1])
-        c = float(parts[2])
+        a, b, c = map(float, update.message.text.split())
     except:
         await update.message.reply_text("Formato inválido. Envía 3 números.")
         return
@@ -110,6 +119,7 @@ async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+
 # ---------------------------
 # HANDLERS
 # ---------------------------
@@ -118,22 +128,30 @@ bot_app.add_handler(CommandHandler("start", start))
 bot_app.add_handler(CallbackQueryHandler(button_handler))
 bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_handler))
 
-# ---------------------------
-# WEBHOOK CORRECTO PTB 20+
-# ---------------------------
 
-@app.post("/")
-async def main_webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, bot_app.bot)
-    await bot_app.process_update(update)
-    return "OK", 200
-
-import asyncio
+# ---------------------------
+# FLASK + WEBHOOK
+# ---------------------------
 
 @app.get("/setwebhook")
 def set_webhook():
-    asyncio.run(bot_app.bot.set_webhook(url=WEBHOOK_URL))
+    loop.run_until_complete(bot_app.bot.set_webhook(url=WEBHOOK_URL))
     return "Webhook set"
+
+@app.post("/")
+def receive_update():
+    """Telegram envía updates aquí."""
+    data = request.get_json(force=True)
+    update = Update.de_json(data, bot_app.bot)
+
+    loop.run_until_complete(bot_app.process_update(update))
+    return "OK"
+
+
+# ---------------------------
+# RUN
+# ---------------------------
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    port = int(os.getenv("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)
